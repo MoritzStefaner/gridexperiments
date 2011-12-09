@@ -1,0 +1,175 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN">
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<title>Force based label placement</title>
+		<script type="text/javascript" src="d3.min.js"></script>
+		<script type="text/javascript" src="d3.layout.min.js"></script>
+		<script type="text/javascript" src="d3.geom.min.js"></script>
+		<script type="text/javascript" src="underscore-min.js"></script>
+	</head>
+	<body>
+		<script type="text/javascript" charset="utf-8">
+			var w = 900, h = 900;
+
+			var vis = d3.select("body").append("svg:svg").attr("width", w).attr("height", h);
+			var background = vis.append("g");
+
+			var nodes = [];
+			var links = [];
+
+			var USE_GRID = true;
+			var GRID_SIZE = 40;
+			
+			var PLAIN = "PLAIN";
+			var HEXA = "HEXA";
+			var SHIFT_ODD_ROWS = "SHIFT_ODD_ROWS";
+			
+			var GRID_TYPE = "SHIFT_ODD_ROWS";
+
+			for(var i = 0; i < 50; i++) {
+				var node = {
+					label : "node " + i
+				};
+				nodes.push(node);
+			};
+
+			for(var i = 0; i < nodes.length; i++) {
+				for(var j = 0; j < i; j++) {
+					if(Math.random() > .95)
+						links.push({
+							source : i,
+							target : j,
+							weight : Math.random()
+						});
+				}
+			};
+
+			var force = d3.layout.force().size([w, h]).nodes(nodes).links(links).gravity(1).linkDistance(0).charge(-3000).linkStrength(function(x) {
+				return x.weight * 10
+			});
+
+
+			force.start();
+
+			var link = vis.selectAll("line.link").data(links).enter().append("svg:line").attr("class", "link").style("stroke", "#CCC");
+
+			var node = vis.selectAll("g.node").data(force.nodes()).enter().append("svg:g").attr("class", "node");
+			node.append("svg:circle").attr("r", 6).style("fill", "#777").style("stroke", "#FFF").style("stroke-width", "3px");
+			node.call(force.drag);
+
+			var updateLink = function() {
+				this.attr("x1", function(d) {
+					return d.source.screenX;
+				}).attr("y1", function(d) {
+					return d.source.screenY;
+				}).attr("x2", function(d) {
+					return d.target.screenX;
+				}).attr("y2", function(d) {
+					return d.target.screenY;
+				});
+
+			}
+
+			var updateNode = function() {
+
+				this.attr("transform", function(d) {
+					if(USE_GRID) {
+						var gridpoint = grid.occupyNearest(d);
+
+						if(gridpoint) {
+							d.screenX = gridpoint.x;
+							d.screenY = gridpoint.y;
+
+							d.x += (gridpoint.x - d.x) * .02;
+							d.y += (gridpoint.y - d.y) * .02;
+						}
+					} else {
+						d.screenX = d.x;
+						d.screenY = d.y;
+					}
+
+					return "translate(" + d.screenX + "," + d.screenY + ")";
+
+				});
+
+			};
+
+			var grid = function(width, height, cellSize) {
+				return {
+					cells : [],
+
+					init : function() {
+						this.cells = [];
+						for(var i = 0; i < width / cellSize; i++) {
+							for(var j = 0; j < height / cellSize; j++) {
+								var cell;
+								switch (GRID_TYPE) {
+									case PLAIN:
+										cell = {
+											x : i * cellSize,
+											y : j * cellSize
+										};
+										break;
+									case SHIFT_ODD_ROWS:
+										cell = {
+											x : i * cellSize,
+											y : 1.5 * (j * cellSize + (i % 2) * cellSize * .5)
+										};
+										break;
+									case HEXA:
+										cell = {
+											x : i * cellSize + (j % 2) * cellSize * .5,
+											y : j * cellSize * .85
+										};
+										break;
+								}
+								this.cells.push(cell);
+								
+							};
+						};
+					},
+
+					sqdist : function(a, b) {
+						return Math.pow(a.x - b.x, 2) + Math.pow(a.y - b.y, 2);
+					},
+
+					occupyNearest : function(p) {
+						var minDist = 1000000;
+						var d;
+						var candidate = null;
+						for(var i = 0; i < this.cells.length; i++) {
+							if(!this.cells[i].occupied && ( d = this.sqdist(p, this.cells[i])) < minDist) {
+								minDist = d;
+								candidate = this.cells[i];
+							}
+						}
+						if(candidate)
+							candidate.occupied = true;
+						return candidate;
+					}
+
+				}
+			}(w, h, GRID_SIZE);
+
+			force.on("tick", function() {
+
+				if(USE_GRID) {
+					grid.init();
+
+					background.select("g.gridCanvas").remove();
+					var gridCanvas = background.append("g").attr("class", "gridCanvas").style("fill", "#000").style("opacity", .2);
+
+					_.each(grid.cells, function(c) {
+						gridCanvas.append("circle").attr("cx", c.x).attr("cy", c.y).attr("r", 2);
+					});
+
+				}
+
+				node.call(updateNode);
+				link.call(updateLink);
+			});
+
+		</script>
+	</body>
+</html>
